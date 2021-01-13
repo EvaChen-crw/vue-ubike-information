@@ -1,51 +1,205 @@
 <!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width">
-  <title>YouBike 臺北市公共自行車即時資訊</title>
+<html lang="en">
 
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css" integrity="sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M" crossorigin="anonymous">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>練習 13： YouBike 臺北市公共自行車即時資訊</title>
+
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css"
+    integrity="sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
 
   <style>
-    body{ padding: 1em;  }
+    body {
+      padding: 1em;
+    }
+    .aa {
+      cursor: pointer;
+    }
+    .fa {
+      color: #AAA;
+    }
+    .sortColor {
+      color: rgb(56, 56, 56);
+    }
+
+    ul.pagination {
+        display: inline-block;
+        padding: 0;
+        margin: 0;
+    }
+    ul.pagination li {display: inline;}
+    ul.pagination li a {
+        color: black;
+        float: left;
+        padding: 8px 16px;
+        text-decoration: none;
+        transition: background-color .3s;
+        border: 1px solid #ddd;
+    }
+    ul.pagination li a.active {
+        background-color: #4CAF50;
+        color: white;
+        border: 1px solid #4CAF50;
+    }
+    ul.pagination li a:hover:not(.active) {background-color: #ddd;}
   </style>
 
-</head>
-<body>
+  <script src="https://unpkg.com/vue@next"></script>
 
-  <h1>YouBike 臺北市公共自行車即時資訊</h1>
+</head>
+
+<body>
+  <p>
+    練習 13： YouBike 臺北市公共自行車即時資訊 <br>
+    完成下列表格，並加入:
+    1. 站點名稱搜尋
+    2. 目前可用車輛 / 總停車格 的排序功能
+    3. 分頁 (選擇)
+  </p>
+
+  <hr>
 
   <div id="app">
-
+    <p>
+      站點名稱搜尋: <input type="text" v-model="searchName">
+    </p>
     <table class="table table-striped">
       <thead>
         <tr>
           <th>#</th>
-          <th>場站名稱</th>
+          <th>No.</th>
+          <th>站點名稱</th>
           <th>場站區域</th>
-          <th>目前可用車輛</th>
-          <th>總停車格</th>
+          <th class="aa" @click="sort('sbi')">目前可用車輛            
+            <i class="pull-right fa fa-sort-amount-asc sortColor" aria-hidden="true" :class="{ 'inverse': isReverse }" v-if="sortType == 'sbi' && !isReverse"></i>            
+            <i class="pull-right fa fa-sort-amount-desc sortColor" aria-hidden="true" :class="{ 'inverse': isReverse }" v-else-if="sortType == 'sbi' && isReverse"></i>  
+            <i class="pull-right fa fa-sort" aria-hidden="true" v-else></i>          
+          </th>
+          <th class="aa" @click="sort('tot')">總停車格            
+            <i class="pull-right fa fa-sort-amount-asc sortColor" aria-hidden="true" :class="{ 'inverse': isReverse }" v-if="sortType == 'tot' && !isReverse"></i>            
+            <i class="pull-right fa fa-sort-amount-desc sortColor" aria-hidden="true" :class="{ 'inverse': isReverse }" v-else-if="sortType == 'tot' && isReverse"></i>    
+            <i class="pull-right fa fa-sort" aria-hidden="true" v-else></i>
+          </th>
           <th>資料更新時間</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="s in ubikeStops">
+        <tr v-for="(s, index) in searchStopName.slice(pageStart, pageStart + limit)">
+          <td>{{ (currentPage-1) * limit + index + 1 }}</td>
           <td>{{ s.sno }}</td>
           <td>{{ s.sna }}</td>
           <td>{{ s.sarea }}</td>
           <td>{{ s.sbi }}</td>
           <td>{{ s.tot }}</td>
-          <td>{{ timeFormat(s.mday) }}</td>
+          <td>{{ timeFormat(s.mday) }}</td>          
         </tr>
       </tbody>
-
     </table>
-
+    <div style="text-align: center;">
+      <ul class="pagination">
+        <li :class="{'disabled': (currentPage === 1)}"
+            @click.prevent="setPage(currentPage-1)"><a href="#">Prev</a></li>
+        <li v-for="n in totalPage" @click.prevent="setPage(n)">
+          <a href="#" :class="{'active': (currentPage === (n))}">{{n}}</a>
+        </li>
+        <li :class="{'disabled': (currentPage === totalPage)}"
+            @click.prevent="setPage(currentPage+1)"><a href="#">Next</a></li>
+      </ul>
+    </div>
   </div>
 
-  <script src="https://unpkg.com/vue@next"></script>
-  <script src="./scripts.js?v=2020081401"></script>
+  <script>
+    // 欄位說明請參照:
+    // http://data.taipei/opendata/datalist/datasetMeta?oid=8ef1626a-892a-4218-8344-f7ac46e1aa48
+    // 半成品參考: https://kuro.tw/vue-ubike-information/
+
+    // sno：站點代號、 sna：場站名稱(中文)、 tot：場站總停車格、
+    // sbi：場站目前車輛數量、 sarea：場站區域(中文)、 mday：資料更新時間、
+    // lat：緯度、 lng：經度、 ar：地(中文)、 sareaen：場站區域(英文)、
+    // snaen：場站名稱(英文)、 aren：地址(英文)、 bemp：空位數量、 act：全站禁用狀態
+
+    const app = Vue.createApp({
+      data () {
+        return {
+          uBikeStops: [],
+          searchName: '',
+          sortType: '',
+          isReverse: true,
+          limit: 15, // 每頁顯示行數
+          currentPage: 1, // 當前頁                    
+        }
+      },
+      computed:{
+        searchStopName(){
+          if (this.searchName !== ''){
+            this.currentPage = 1;
+          }
+          return this.uBikeStops.filter(u => {return u.sna.toLowerCase().includes(this.searchName)});
+        },
+        pageStart(){
+          return (this.currentPage - 1) * this.limit;
+        },        
+        totalPage(){
+          return Math.ceil(this.searchStopName.length / this.limit);
+        }        
+      },
+      methods:{
+        sort(type){
+          this.sortType = type;
+          this.oriShow = false;
+          if(this.isReverse){            
+            this.uBikeStops.sort(this.Asc(type));
+          }
+          else{
+            this.uBikeStops.sort(this.Desc(type));
+          }
+          this.isReverse = !this.isReverse;
+        },
+        Desc(attr) {
+          return function(a,b){
+            var val1 = a[attr];
+            var val2 = b[attr];
+            return val2 - val1;
+            }
+        },
+        Asc(attr) {
+          return function(a,b){
+            var val1 = a[attr];
+            var val2 = b[attr];
+            return val1 - val2;
+            }
+        },
+        timeFormat(t){
+          var date = [], time = [];
+          date.push(t.substr(0, 4));
+          date.push(t.substr(4, 2));
+          date.push(t.substr(6, 2));
+          time.push(t.substr(8, 2));
+          time.push(t.substr(10, 2));
+          time.push(t.substr(12, 2));
+          return date.join("/") + ' ' + time.join(":");
+        },
+        setPage(page){
+          if( page <= 0 || page > this.totalPage ){
+            return;
+          }
+          this.currentPage = page;
+        }
+      },
+      created () {
+        fetch('https://tcgbusfs.blob.core.windows.net/blobyoubike/YouBikeTP.gz')
+            .then(res => res.json())
+            .then(res => {
+              // 將 json 轉陣列後存入 this.uBikeStops
+              this.uBikeStops = Object.keys(res.retVal).map(key => res.retVal[key]);
+          });            
+      }
+    }).mount('#app');
+  </script>
 
 </body>
+
 </html>
